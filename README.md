@@ -2,6 +2,10 @@
 
 AI 기반 개인 건강 관리 도우미 애플리케이션입니다. 로컬 LLM 모델(Ollama)을 사용하여 프라이버시를 보장하면서 건강 상담 서비스를 제공합니다.
 
+## 🌐 온라인 데모
+
+**[OpenHealth 웹 데모 체험하기](https://openhealth-demo.streamlit.app)** _(Streamlit Cloud에서 바로 사용 가능)_
+
 ## ✨ 주요 기능
 
 ### 🩺 AI 건강 상담
@@ -23,21 +27,29 @@ AI 기반 개인 건강 관리 도우미 애플리케이션입니다. 로컬 LLM
 
 ## 🚀 설치 및 실행
 
-### 1. 사전 요구사항
+### 🌐 온라인 사용 (권장)
+가장 쉬운 방법은 온라인 데모를 사용하는 것입니다:
+- **[OpenHealth 웹 데모](https://openhealth-demo.streamlit.app)**
+- 설치 없이 바로 사용 가능
+- 모든 기능 체험 가능
 
-#### Ollama 설치
+### 💻 로컬 설치
+
+#### 1. 사전 요구사항
+
+**Ollama 설치** (로컬 AI 모델용)
 ```bash
 # Windows/macOS/Linux
 # https://ollama.ai 에서 다운로드 후 설치
 ```
 
-#### Python 환경
+**Python 환경**
 ```bash
 # Python 3.8 이상 필요
 python --version
 ```
 
-### 2. 프로젝트 설정
+#### 2. 프로젝트 설정
 
 ```bash
 # 프로젝트 클론
@@ -54,7 +66,7 @@ venv\Scripts\activate
 source venv/bin/activate
 ```
 
-### 3. Ollama 모델 다운로드
+#### 3. Ollama 모델 다운로드
 
 ```bash
 # 필수 모델들 다운로드 (용량에 따라 시간 소요)
@@ -67,13 +79,13 @@ ollama pull deepseek-r1:1.5b # 1.1 GB - 빠른 응답
 ollama list
 ```
 
-### 4. 의존성 설치
+#### 4. 의존성 설치
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 5. 애플리케이션 실행
+#### 5. 애플리케이션 실행
 
 ```bash
 # 자동 설치 및 실행
@@ -86,7 +98,7 @@ python main.py
 streamlit run app/ui/streamlit_app.py
 ```
 
-### 6. 웹 브라우저에서 접속
+#### 6. 웹 브라우저에서 접속
 
 ```
 http://localhost:8501
@@ -100,6 +112,20 @@ http://localhost:8501
 | **qwen2.5:7b** | 4.7 GB | 증상 분석 | 상세한 증상 분석, 원인 추론 |
 | **gemma2:9b** | 5.4 GB | 예방 의학 | 건강 예방, 생활습관 개선 |
 | **deepseek-r1:1.5b** | 1.1 GB | 빠른 응답 | 응급 상황, 간단한 질문 |
+
+## 🌐 Streamlit Cloud 배포
+
+### 배포 방법
+1. **https://share.streamlit.io** 에서 계정 생성
+2. GitHub 리포지토리 연결: `waterfirst/health_doctor`
+3. 메인 파일: `streamlit_app.py`
+4. 자동 배포 완료!
+
+### 환경 변수 설정 (선택사항)
+OpenAI API를 사용하려면 Streamlit Cloud Secrets에 추가:
+```toml
+OPENAI_API_KEY = "your-api-key-here"
+```
 
 ## 📱 사용 방법
 
@@ -131,9 +157,9 @@ http://localhost:8501
 - AI 답변은 참고용으로만 사용하시기 바랍니다
 
 ### 데이터 프라이버시
-- 모든 데이터는 **로컬에 저장**됩니다
-- 외부 서버로 전송되지 않습니다
-- Ollama를 통한 로컬 AI 처리로 프라이버시 보장
+- 모든 데이터는 **로컬에 저장**됩니다 (로컬 설치 시)
+- 외부 서버로 전송되지 않습니다 (Ollama 사용 시)
+- 온라인 데모는 세션 종료 시 데이터가 삭제됩니다
 
 ## 🛠️ 문제 해결
 
@@ -158,32 +184,44 @@ ollama list
 streamlit run app/ui/streamlit_app.py --server.port 8502
 ```
 
+### 클라우드 배포 이슈
+- OpenAI API 키가 필요한 경우 Streamlit Secrets에 설정
+- Ollama는 로컬 전용이므로 클라우드에서는 대체 응답 제공
+
 ## 🔧 개발자 정보
 
 ### 기술 스택
-- **Backend**: Python, Ollama
+- **Backend**: Python, Ollama, OpenAI API
 - **Frontend**: Streamlit
 - **Data**: Pandas, JSON
 - **Visualization**: Plotly
-- **AI Models**: Llama, Qwen, Gemma, DeepSeek
+- **AI Models**: Llama, Qwen, Gemma, DeepSeek, GPT
 
 ### 프로젝트 구조
 ```
 health_doctor/
 ├── app/
 │   ├── models/
-│   │   └── ollama_client.py
+│   │   ├── ollama_client.py    # 로컬 Ollama 클라이언트
+│   │   └── openai_client.py    # 클라우드용 OpenAI 클라이언트
 │   ├── services/
-│   │   └── health_tracker.py
+│   │   └── health_tracker.py   # 건강 데이터 추적
 │   └── ui/
-│       └── streamlit_app.py
+│       └── streamlit_app.py    # 웹 UI
 ├── data/
-│   └── health_records.json
-├── main.py
-├── setup.py
-├── requirements.txt
-└── README.md
+│   └── health_records.json     # 건강 기록 저장
+├── .streamlit/
+│   └── config.toml            # Streamlit 설정
+├── main.py                    # 로컬 실행용
+├── streamlit_app.py          # 클라우드 배포용
+├── setup.py                  # 자동 설치
+└── requirements.txt          # 의존성 목록
 ```
+
+### 배포 옵션
+- **로컬 실행**: Ollama + Python 설치 필요
+- **Streamlit Cloud**: 온라인 즉시 사용 가능
+- **Docker**: 컨테이너화 배포 (추후 지원)
 
 ## 📄 라이센스
 
@@ -197,16 +235,24 @@ MIT License - 자유롭게 사용, 수정, 배포 가능합니다.
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
+## 🔮 향후 계획
+
+- [ ] 모바일 앱 개발
+- [ ] 웨어러블 기기 연동
+- [ ] 의료진 포털 개발
+- [ ] 다국어 지원 (영어, 중국어)
+- [ ] 실시간 알림 시스템
+- [ ] 머신러닝 개인화
+
 ---
 
 **⚡ 빠른 시작:**
 ```bash
 git clone https://github.com/waterfirst/health_doctor.git
 cd health_doctor
-python -m venv venv && venv\Scripts\activate
-pip install -r requirements.txt
-ollama pull llama3.2:3b
 python setup.py
 ```
 
-🌐 **웹 접속**: http://localhost:8501
+**🌐 온라인 데모**: [OpenHealth 체험하기](https://openhealth-demo.streamlit.app)
+
+**💡 문의**: GitHub Issues 또는 [여기서 문의](https://github.com/waterfirst/health_doctor/issues)
