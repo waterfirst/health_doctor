@@ -318,3 +318,232 @@ def health_data_page():
                     st.error("❌ 저장에 실패했습니다.")
             else:
                 st.warning("약물명과 용량을 입력해주세요.")
+
+def health_trends_page():
+    """건강 추이 분석 페이지"""
+    st.markdown('<h1 class="main-header">📈 건강 추이 분석</h1>', unsafe_allow_html=True)
+    
+    # 기간 선택
+    col1, col2 = st.columns([1, 3])
+    
+    with col1:
+        analysis_period = st.selectbox("분석 기간", [7, 14, 30, 90])
+        
+    # 건강 요약 생성
+    summary = health_tracker.generate_health_summary(st.session_state.user_id, analysis_period)
+    
+    if summary["total_records"] == 0:
+        st.info("📝 기록된 건강 데이터가 없습니다. 먼저 건강 데이터를 입력해주세요.")
+        return
+    
+    # 건강 알림
+    if summary["alerts"]:
+        st.markdown("### 🚨 건강 알림")
+        for alert in summary["alerts"]:
+            if "⚠️" in alert:
+                st.markdown(f'<div class="status-danger">{alert}</div>', unsafe_allow_html=True)
+            elif "ℹ️" in alert:
+                st.markdown(f'<div class="status-warning">{alert}</div>', unsafe_allow_html=True)
+    
+    # 메트릭 카드들
+    st.markdown("### 📊 건강 지표 요약")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    # 생체 신호 요약
+    if summary["vital_signs"]:
+        with col1:
+            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            st.metric("총 기록 수", summary["total_records"])
+            
+            if "blood_pressure" in summary["vital_signs"]:
+                bp = summary["vital_signs"]["blood_pressure"]
+                st.metric(
+                    "평균 혈압", 
+                    f"{bp['avg_systolic']:.0f}/{bp['avg_diastolic']:.0f}",
+                    f"최근: {bp['latest_systolic']}/{bp['latest_diastolic']}"
+                )
+            
+            if "heart_rate" in summary["vital_signs"]:
+                hr = summary["vital_signs"]["heart_rate"]
+                st.metric("평균 심박수", f"{hr['avg']:.0f} bpm", f"최근: {hr['latest']} bpm")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    # 증상 요약
+    if summary["symptoms"]:
+        with col2:
+            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            st.subheader("🤒 증상 현황")
+            
+            symptoms = summary["symptoms"]
+            st.metric("증상 보고 횟수", symptoms["total_reports"])
+            st.metric("평균 심각도", f"{symptoms['avg_severity']:.1f}/10")
+            
+            if symptoms["most_common"]:
+                st.write("**주요 증상:**")
+                for symptom, count in list(symptoms["most_common"].items())[:3]:
+                    st.write(f"• {symptom}: {count}회")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    # 복용약 요약
+    if summary["medications"]:
+        with col3:
+            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            st.subheader("💊 복용약 현황")
+            
+            meds = summary["medications"]
+            st.metric("총 복용 횟수", meds["total_doses"])
+            st.metric("복용 약물 종류", meds["unique_medications"])
+            
+            if meds["medications_taken"]:
+                st.write("**복용 약물:**")
+                for med, count in list(meds["medications_taken"].items())[:3]:
+                    st.write(f"• {med}: {count}회")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    # 차트 표시
+    st.markdown("### 📈 생체 신호 추이")
+    
+    chart = health_tracker.create_vital_signs_chart(st.session_state.user_id, analysis_period)
+    if chart:
+        st.plotly_chart(chart, use_container_width=True)
+    else:
+        st.info("표시할 생체 신호 데이터가 없습니다.")
+
+def system_status_page():
+    """시스템 상태 페이지"""
+    st.markdown('<h1 class="main-header">⚙️ 시스템 상태</h1>', unsafe_allow_html=True)
+    
+    # Ollama 모델 상태
+    model_status = health_client.get_model_status()
+    
+    st.subheader("🤖 Ollama 모델 상태")
+    
+    if model_status["available_models"]:
+        for model_name, spec in model_status["model_specialties"].items():
+            status = "🟢 사용 가능" if spec["available"] else "🔴 사용 불가"
+            
+            with st.expander(f"{status} {model_name}"):
+                st.write(f"**특화 분야:** {spec['specialty']}")
+                st.write(f"**설명:** {spec['description']}")
+                
+                if spec["available"]:
+                    # 간단한 테스트 버튼
+                    if st.button(f"{model_name} 테스트", key=f"test_{model_name}"):
+                        with st.spinner("모델 테스트 중..."):
+                            result = asyncio.run(health_client.get_health_advice(
+                                "안녕하세요, 잘 작동하나요?", 
+                                spec['specialty']
+                            ))
+                            
+                            if result.get("error"):
+                                st.error(f"테스트 실패: {result['error']}")
+                            else:
+                                st.success("✅ 모델이 정상 작동합니다!")
+                                st.write(result["response"][:200] + "...")
+    else:
+        st.error("사용 가능한 모델이 없습니다.")
+        st.markdown("""
+        **모델 설치 방법:**
+        ```bash
+        ollama pull llama3.2:3b
+        ollama pull qwen2.5:7b  
+        ollama pull gemma2:9b
+        ollama pull deepseek-r1:1.5b
+        ```
+        """)
+    
+    # 데이터 상태
+    st.subheader("📊 데이터 상태")
+    
+    user_records = health_tracker.get_user_records(st.session_state.user_id, days=365)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        vital_records = [r for r in user_records if r.record_type == "vital_signs"]
+        st.metric("생체 신호 기록", len(vital_records))
+    
+    with col2:
+        symptom_records = [r for r in user_records if r.record_type == "symptoms"]
+        st.metric("증상 기록", len(symptom_records))
+    
+    with col3:
+        med_records = [r for r in user_records if r.record_type == "medication"]
+        st.metric("복용약 기록", len(med_records))
+    
+    # 데이터 내보내기/가져오기
+    st.subheader("💾 데이터 관리")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("📤 데이터 내보내기"):
+            # JSON 형태로 데이터 내보내기
+            export_data = {
+                "user_id": st.session_state.user_id,
+                "export_date": datetime.now().isoformat(),
+                "records": [
+                    {
+                        "timestamp": r.timestamp,
+                        "record_type": r.record_type,
+                        "data": r.data,
+                        "notes": r.notes
+                    }
+                    for r in user_records
+                ]
+            }
+            
+            st.download_button(
+                label="💾 JSON 파일 다운로드",
+                data=json.dumps(export_data, ensure_ascii=False, indent=2),
+                file_name=f"health_data_{st.session_state.user_id}_{datetime.now().strftime('%Y%m%d')}.json",
+                mime="application/json"
+            )
+    
+    with col2:
+        uploaded_file = st.file_uploader("📤 데이터 가져오기", type=['json'])
+        if uploaded_file:
+            try:
+                import_data = json.load(uploaded_file)
+                st.success(f"✅ {len(import_data.get('records', []))}개의 기록을 가져올 준비가 되었습니다.")
+                
+                if st.button("데이터 가져오기 실행"):
+                    # 실제 구현에서는 데이터 검증 및 중복 처리 필요
+                    st.info("데이터 가져오기 기능은 추후 구현 예정입니다.")
+            except Exception as e:
+                st.error(f"파일 읽기 오류: {e}")
+
+def main():
+    """메인 애플리케이션"""
+    initialize_session_state()
+    
+    # 네비게이션
+    current_page = sidebar_navigation()
+    
+    # 페이지 라우팅
+    if current_page == "건강 상담":
+        health_consultation_page()
+    elif current_page == "건강 데이터":
+        health_data_page()
+    elif current_page == "건강 추이":
+        health_trends_page()
+    elif current_page == "복용약 관리":
+        health_data_page()  # 탭으로 구현됨
+    elif current_page == "시스템 상태":
+        system_status_page()
+    
+    # 푸터
+    st.markdown("---")
+    st.markdown("""
+    <div style="text-align: center; color: #666;">
+        🏥 OpenHealth v1.0 | Powered by Ollama & Streamlit<br>
+        ⚠️ 이 도구는 의료 조언을 대체하지 않습니다. 심각한 증상이 있으면 의료진에게 상담하세요.
+    </div>
+    """, unsafe_allow_html=True)
+
+if __name__ == "__main__":
+    main()
