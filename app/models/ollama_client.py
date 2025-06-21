@@ -1,37 +1,42 @@
 """
-Ollama 클라이언트 - 다중 LLM 모델 관리
+클라우드용 Ollama 클라이언트 - HTTP API 사용
 """
 
-import ollama
+import requests
 import json
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
-from loguru import logger
 import asyncio
+import os
 
 @dataclass
 class ModelInfo:
     """모델 정보 클래스"""
     name: str
     size: str
-    specialty: str  # 각 모델의 특화 분야
+    specialty: str
     description: str
 
-class OllamaHealthClient:
-    """건강 상담을 위한 Ollama 클라이언트"""
+class CloudOllamaClient:
+    """클라우드 환경용 Ollama 클라이언트 (HTTP API 사용)"""
     
     def __init__(self):
-        self.client = ollama.Client()
+        # 환경변수에서 Ollama 서버 URL 가져오기 (기본값: 로컬)
+        self.base_url = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
         self.available_models = self._get_available_models()
         self.model_specs = self._define_model_specialties()
         
     def _get_available_models(self) -> List[str]:
-        """사용 가능한 모델 목록 조회"""
+        """사용 가능한 모델 목록 조회 (HTTP API)"""
         try:
-            models = self.client.list()
-            return [model['name'] for model in models['models']]
+            response = requests.get(f"{self.base_url}/api/tags", timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                return [model['name'] for model in data.get('models', [])]
+            else:
+                return []
         except Exception as e:
-            logger.error(f"모델 목록 조회 실패: {e}")
+            print(f"모델 목록 조회 실패: {e}")
             return []
     
     def _define_model_specialties(self) -> Dict[str, ModelInfo]:
@@ -120,7 +125,11 @@ class OllamaHealthClient:
     async def get_health_advice(self, user_input: str, 
                                specialty: str = "general_health",
                                context: str = "") -> Dict[str, Any]:
-        """건강 조언 요청"""
+        """건강 조언 요청 (HTTP API 사용)"""
+        
+        # Ollama 서버가 사용 불가능한 경우 더미 응답 반환
+        if not self.available_models:
+            return self._get_fallback_response(user_input, specialty)
         
         # 특화 분야에 맞는 모델 선택
         model_name = self.get_model_by_specialty(specialty)
@@ -128,42 +137,73 @@ class OllamaHealthClient:
             model_name = self.available_models[0] if self.available_models else None
             
         if not model_name:
-            return {
-                "error": "사용 가능한 모델이 없습니다",
-                "model_used": None,
-                "response": None
-            }
+            return self._get_fallback_response(user_input, specialty)
         
         # 프롬프트 타입 결정
         prompt_type = self._determine_prompt_type(user_input)
         prompt = self.create_health_prompt(user_input, context, prompt_type)
         
         try:
-            response = self.client.chat(
-                model=model_name,
-                messages=[
+            # HTTP API로 요청
+            payload = {
+                "model": model_name,
+                "messages": [
                     {
-                        'role': 'user',
-                        'content': prompt
+                        "role": "user",
+                        "content": prompt
                     }
-                ]
+                ],
+                "stream": False
+            }
+            
+            response = requests.post(
+                f"{self.base_url}/api/chat",
+                json=payload,
+                timeout=60
             )
             
-            return {
-                "model_used": model_name,
-                "specialty": specialty,
-                "prompt_type": prompt_type,
-                "response": response['message']['content'],
-                "error": None
-            }
-            
+            if response.status_code == 200:
+                result = response.json()
+                return {
+                    "model_used": model_name,
+                    "specialty": specialty,
+                    "prompt_type": prompt_type,
+                    "response": result['message']['content'],
+                    "error": None
+                }
+            else:
+                return self._get_fallback_response(user_input, specialty)
+                
         except Exception as e:
-            logger.error(f"모델 응답 생성 실패: {e}")
-            return {
-                "error": f"모델 응답 실패: {str(e)}",
-                "model_used": model_name,
-                "response": None
-            }
+            print(f"모델 응답 생성 실패: {e}")
+            return self._get_fallback_response(user_input, specialty)
+    
+    def _get_fallback_response(self, user_input: str, specialty: str) -> Dict[str, Any]:
+        """Ollama 서버를 사용할 수 없을 때의 대체 응답"""
+        
+        # 키워드 기반 기본 응답
+        fallback_responses = {
+            "두통": "두통의 일반적인 원인으로는 스트레스, 수면 부족, 탈수, 긴장성 두통 등이 있습니다. 충분한 휴식과 수분 섭취를 권하며, 지속되거나 심한 경우 의료진 상담을 받으세요.",
+            "발열": "발열은 몸의 자연스러운 방어 반응입니다. 충분한 휴식과 수분 섭취가 중요하며, 38.5도 이상의 고열이나 다른 심각한 증상이 동반되면 즉시 의료진에게 상담받으세요.",
+            "기침": "기침의 원인은 감기, 알레르기, 건조한 공기 등 다양합니다. 충분한 수분 섭취와 가습기 사용이 도움될 수 있으며, 2주 이상 지속되면 의료진 상담을 권합니다.",
+            "복통": "복통의 원인은 매우 다양합니다. 가벼운 소화불량일 수도 있지만, 심한 통증이나 발열, 구토가 동반되면 즉시 응급실을 방문하세요."
+        }
+        
+        # 키워드 매칭으로 응답 선택
+        response = "죄송합니다. 현재 AI 모델 서버에 연결할 수 없습니다. 일반적인 건강 관리 수칙을 따르시고, 증상이 지속되거나 악화되면 반드시 의료진에게 상담받으시기 바랍니다."
+        
+        for keyword, fallback in fallback_responses.items():
+            if keyword in user_input:
+                response = fallback
+                break
+        
+        return {
+            "model_used": "fallback_system",
+            "specialty": specialty,
+            "prompt_type": "fallback",
+            "response": response + "\n\n⚠️ 참고: 현재 로컬 AI 모델이 연결되지 않아 기본 응답을 제공합니다. 정확한 의료 상담은 전문의에게 받으시기 바랍니다.",
+            "error": None
+        }
     
     def _determine_prompt_type(self, user_input: str) -> str:
         """사용자 입력을 분석하여 프롬프트 타입 결정"""
@@ -197,8 +237,10 @@ class OllamaHealthClient:
                     "available": name in self.available_models
                 }
                 for name, info in self.model_specs.items()
-            }
+            },
+            "server_status": "connected" if self.available_models else "disconnected",
+            "fallback_mode": len(self.available_models) == 0
         }
 
 # 전역 클라이언트 인스턴스
-health_client = OllamaHealthClient()
+health_client = CloudOllamaClient()
